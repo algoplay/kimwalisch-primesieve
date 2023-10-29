@@ -35,6 +35,10 @@
 #include <cmath>
 #include <initializer_list>
 
+#if defined(MULTIARCH_AVX512)
+  #include <immintrin.h>
+#endif
+
 /// All x64 CPUs support the SSE2 vector instruction set
 #if defined(__SSE2__) && \
     __has_include(<emmintrin.h>)
@@ -191,6 +195,9 @@ const uint64_t buffersDist =
 /// This algorithm is portable since all x64 CPUs support the SSE2
 /// instruction set.
 ///
+#if defined(MULTIARCH_AVX512)
+  __attribute__ ((target ("default")))
+#endif
 void andBuffers(const uint8_t* __restrict buf0,
                 const uint8_t* __restrict buf1,
                 const uint8_t* __restrict buf2,
@@ -271,6 +278,9 @@ void andBuffers(const uint8_t* __restrict buf0,
 
 #else
 
+#if defined(MULTIARCH_AVX512)
+  __attribute__ ((target ("default")))
+#endif
 void andBuffers(const uint8_t* __restrict buf0,
                 const uint8_t* __restrict buf1,
                 const uint8_t* __restrict buf2,
@@ -290,6 +300,37 @@ void andBuffers(const uint8_t* __restrict buf0,
   for (std::size_t i = 0; i < bytes; i++)
     output[i] = buf0[i] & buf1[i] & buf2[i] & buf3[i] &
                 buf4[i] & buf5[i] & buf6[i] & buf7[i];
+}
+
+#endif
+
+#if defined(MULTIARCH_AVX512)
+
+__attribute__ ((target ("avx512f,avx512bw")))
+void andBuffers(const uint8_t* __restrict buf0,
+                const uint8_t* __restrict buf1,
+                const uint8_t* __restrict buf2,
+                const uint8_t* __restrict buf3,
+                const uint8_t* __restrict buf4,
+                const uint8_t* __restrict buf5,
+                const uint8_t* __restrict buf6,
+                const uint8_t* __restrict buf7,
+                uint8_t* __restrict output,
+                std::size_t bytes)
+{
+  for (std::size_t i = 0; i < bytes; i += sizeof(__m512i))
+  {
+    __mmask64 mask = (i + 64 < bytes) ? 0xffffffffffffffffull : 0xffffffffffffffffull >> (i + 64 - bytes);
+
+    _mm512_mask_storeu_epi8((__m512i*) &output[i], mask,
+        _mm512_and_si512(
+            _mm512_and_si512(
+                _mm512_and_si512(_mm512_maskz_loadu_epi8(mask, (const __m512i*) &buf0[i]), _mm512_maskz_loadu_epi8(mask, (const __m512i*) &buf1[i])),
+                _mm512_and_si512(_mm512_maskz_loadu_epi8(mask, (const __m512i*) &buf2[i]), _mm512_maskz_loadu_epi8(mask, (const __m512i*) &buf3[i]))),
+            _mm512_and_si512(
+                _mm512_and_si512(_mm512_maskz_loadu_epi8(mask, (const __m512i*) &buf4[i]), _mm512_maskz_loadu_epi8(mask, (const __m512i*) &buf5[i])),
+                _mm512_and_si512(_mm512_maskz_loadu_epi8(mask, (const __m512i*) &buf6[i]), _mm512_maskz_loadu_epi8(mask, (const __m512i*) &buf7[i])))));
+  }
 }
 
 #endif
